@@ -13,13 +13,15 @@
 2. Для генерации PDF файлов используйте скрипт `build-pdf.ps1`.
 
 
-## 🦫 Статистика плотины (Repo Stats)
+<div align="center">
 
-| Категория | Счетчик |
-| :--- | :--- |
-| **Визиты бобров** | <img src="https://komarev.com/ghpvc/?username=Bobr2610-SIS-Fund&color=brown&style=flat-square&label=BOBR+COUNT" alt="Bobr Count" /> |
-| **Статус плотины** | ![Build Status](https://img.shields.io/badge/Плотину-строим-orange?style=flat-square&logo=git) |
+### 🦫 Боброметр посещений 🦫
 
----
+<img src="https://count.getloli.com/@Bobr2610-SIS-Fund?name=Bobr2610-SIS-Fund&theme=asoul&padding=7&offset=0&align=top&scale=1&pixelated=1&darkmode=auto" alt="Bobr Counter" />
 
+<br>
+
+<img src="https://img.shields.io/badge/Бобров_зашло-12345-brown?style=for-the-badge&logo=generic-share&logoColor=white&labelColor=6F4E37" alt="Beaver Count">
+
+</div>
 Этот счётчик показывает количество посещений.
