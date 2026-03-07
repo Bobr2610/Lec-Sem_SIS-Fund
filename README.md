@@ -15,9 +15,8 @@
 
 <div align="center">
 
-### 🦫 Боброметр посещений 🦫
+### посещений
 
 <img src="https://count.getloli.com/@Bobr2610-SIS-Fund?name=Bobr2610-SIS-Fund&theme=asoul&padding=7&offset=0&align=top&scale=1&pixelated=1&darkmode=auto" alt="Bobr Counter" />
 
 </div>
-Этот счётчик показывает количество посещений.
