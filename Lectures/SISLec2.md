@@ -117,5 +117,18 @@ union semun{
 - GETNCNT - 
 - GETZCNT - 
 
+### Концепции работы с разделяемой областью памяти
+
+```c
+int shmget(key_t key, int size, int flag)
+void* shmat(int shmId, void*addr, int flag)
+int shmdt(void* addr)
+      shmctl -||-
+```
+
+- IPC_STAT
+- IPC_SET
+- IPC_RMID - удалить можно только неиспользумую разделяемой памяти
+
 ## Интернет (очень похоже на лецию)
 [Подробный вариант лекции](https://parallel.uran.ru/book/export/html/505)
