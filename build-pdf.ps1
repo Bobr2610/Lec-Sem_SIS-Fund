@@ -1,32 +1,41 @@
-Write-Host "Building PDF..." -ForegroundColor Cyan
+Write-Host "Building PDFs for all categories..." -ForegroundColor Cyan
 
-$semFiles = Get-ChildItem -Path "Seminars" -Filter "*.md" | Sort-Object { [int]($_.BaseName -replace '\D+', '') }
+# Define categories and filters
+$categories = @(
+    @{ Name = "SIS_Lectures"; Filter = "Lectures/SIS*.md"; Output = "SIS_Lectures.pdf" },
+    @{ Name = "FUN_Lectures"; Filter = "Lectures/Fun*.md"; Output = "FUN_Lectures.pdf" },
+    @{ Name = "SIS_Seminars"; Filter = "Seminars/SIS*.md"; Output = "SIS_Seminars.pdf" },
+    @{ Name = "FUN_Seminars"; Filter = "Seminars/Fun*.md"; Output = "FUN_Seminars.pdf" }
+)
 
-$files = @()
-$files += $semFiles | ForEach-Object { "Seminars/$($_.Name)" }
+foreach ($category in $categories) {
+    Write-Host "Processing category: $($category.Name)" -ForegroundColor Cyan
 
-if ($files.Count -eq 0) {
-    Write-Host "No markdown files found in Seminars/" -ForegroundColor Red
-    exit 1
-}
+    $files = Get-ChildItem -Recurse -Filter $category.Filter | Sort-Object { [int]($_.BaseName -replace '\D+', '') } | ForEach-Object { $_.FullName }
 
-Write-Host "Found $($files.Count) files to process" -ForegroundColor Gray
+    if ($files.Count -eq 0) {
+        Write-Host "No markdown files found for $($category.Name)" -ForegroundColor Red
+        continue
+    }
 
-Write-Host "Creating Seminars.pdf..." -ForegroundColor Cyan
-pandoc $files `
-    -o Seminars.pdf `
-    --pdf-engine=xelatex `
-    -V geometry:margin=0.5cm `
-    -V mainfont="Cambria" `
-    -V mathfont="Cambria Math" `
-    -V monofont="Consolas" `
-    -V pagestyle=empty `
-    --from markdown+tex_math_single_backslash+tex_math_dollars-yaml_metadata_block
+    Write-Host "Found $($files.Count) files to process for $($category.Name)" -ForegroundColor Gray
 
-if ($LASTEXITCODE -eq 0) {
-    Write-Host "PDF created successfully: Seminars.pdf" -ForegroundColor Green
-    $file = Get-Item Seminars.pdf
-    Write-Host "Size: $([math]::Round($file.Length / 1KB, 1)) KB" -ForegroundColor Gray
-} else {
-    Write-Host "Error creating Seminars.pdf" -ForegroundColor Red
+    Write-Host "Creating $($category.Output)..." -ForegroundColor Cyan
+    pandoc $files `
+        -o $category.Output `
+        --pdf-engine=xelatex `
+        -V geometry:margin=0.5cm `
+        -V mainfont="Cambria" `
+        -V mathfont="Cambria Math" `
+        -V monofont="Consolas" `
+        -V pagestyle=empty `
+        --from markdown+tex_math_single_backslash+tex_math_dollars-yaml_metadata_block
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "PDF created successfully: $($category.Output)" -ForegroundColor Green
+        $file = Get-Item $category.Output
+        Write-Host "Size: $([math]::Round($file.Length / 1KB, 1)) KB" -ForegroundColor Gray
+    } else {
+        Write-Host "Error creating $($category.Output)" -ForegroundColor Red
+    }
 }

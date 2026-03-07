@@ -67,7 +67,7 @@ int msgrev(int msgfd, const void* mdgPrt, int len, int mtype, int flag)
 ### Управление очередью сообщений
 
 ```c
-int msgctl(int msgfd, int cmd, struct msgId_ds * mbufPtr)
+int msgctl(int msgfd, int cmd, struct msgId_ds *mbufPtr)
 // msgfd - целое число, которое полученно от msget
 // cmd - команда
 // msgId_ds * mbufPt - указатель на структуру с полями, которые описывают очередь
@@ -81,6 +81,21 @@ IPC_RMID - удаление очереди
 msgctl(msgfd, IPC_RMID, Null) // удаление очереди сообщений
 ```
 
+### Концепции работы с семафорами
+
+```c
+int semget(key_t ley, int num_sem, int flag)
+int semop(int semId, struct scmbuf *pBuf, int len)
+
+struct sembuf{
+    short sem_num;
+    short sem_op;
+    short sem_flag;
+};
+```
+
+Флаг
+SEM_UNDO 
 
 
 ## Интернет (очень похоже на лецию)
