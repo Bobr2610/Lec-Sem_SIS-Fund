@@ -19,9 +19,5 @@
 
 <img src="https://count.getloli.com/@Bobr2610-SIS-Fund?name=Bobr2610-SIS-Fund&theme=asoul&padding=7&offset=0&align=top&scale=1&pixelated=1&darkmode=auto" alt="Bobr Counter" />
 
-<br>
-
-<img src="https://img.shields.io/badge/Бобров_зашло-12345-brown?style=for-the-badge&logo=generic-share&logoColor=white&labelColor=6F4E37" alt="Beaver Count">
-
 </div>
 Этот счётчик показывает количество посещений.
