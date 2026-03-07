@@ -97,6 +97,15 @@ struct sembuf{
 Флаг
 SEM_UNDO 
 
+```c
+int semdl(int semId, int num, int cmd, union semnum arg)
+
+union semun{
+    int val; // значение семафора
+    struct semid_ds *buf; // управляющие парметры
+    ushort *array; // массив значений семафора
+}
+```
 
 ## Интернет (очень похоже на лецию)
 [Подробный вариант лекции](https://parallel.uran.ru/book/export/html/505)
