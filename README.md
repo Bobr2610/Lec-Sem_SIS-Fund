@@ -14,6 +14,8 @@
 
 ## Счётчик гостей
 
-![Visitor Count](https://profile-counter.glitch.me/Fund_OS_4sem/count.svg)
+![Гостей:](https://hits.seeyoufarm.com/api/count/incr?url=https%3A%2F%2FMAI-FundOS-4sem&theme=modern)
+
+![Dancing Robot](https://media.giphy.com/media/3o7aD2saalBwwftBIY/giphy.gif)
 
 Этот счётчик показывает количество посещений.
