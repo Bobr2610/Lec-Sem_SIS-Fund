@@ -12,10 +12,14 @@
 1. Откройте соответствующий файл лекции или семинара для просмотра материалов.
 2. Для генерации PDF файлов используйте скрипт `build-pdf.ps1`.
 
-## Счётчик гостей
 
-![Гостей:](https://hits.seeyoufarm.com/api/count/incr?url=https%3A%2F%2FMAI-FundOS-4sem&theme=modern)
+## 🦫 Статистика плотины (Repo Stats)
 
-![Dancing Robot](https://media.giphy.com/media/3o7aD2saalBwwftBIY/giphy.gif)
+| Категория | Счетчик |
+| :--- | :--- |
+| **Визиты бобров** | <img src="https://komarev.com/ghpvc/?username=Bobr2610-SIS-Fund&color=brown&style=flat-square&label=BOBR+COUNT" alt="Bobr Count" /> |
+| **Статус плотины** | ![Build Status](https://img.shields.io/badge/Плотину-строим-orange?style=flat-square&logo=git) |
+
+---
 
 Этот счётчик показывает количество посещений.
