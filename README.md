@@ -17,6 +17,6 @@
 
 ### посещений
 
-<img src="https://count.getloli.com/@Bobr2610-SIS-Fund?name=Bobr2610-SIS-Fund&theme=asoul&padding=7&offset=0&align=top&scale=1&pixelated=1&darkmode=auto" alt="Bobr Counter" />
+[![Views](https://raw.githubusercontent.com/Bobr2610/Beavers_counter/main/counter.png)](https://github.com/Bobr2610/Beavers_counter)
 
 </div>
