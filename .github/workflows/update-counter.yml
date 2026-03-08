@@ -1,0 +1,55 @@
+name: Update Visitor Counter
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - counter.png
+      - theme/
+  schedule:
+    - cron: '0 * * * *'  # Запуск каждый час
+  workflow_dispatch:  # Позволяет запустить вручную
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get count
+        id: count
+        env:
+          TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
+        run: |
+          # Try Traffic API first
+          if [ -n "$TOKEN" ]; then
+            RESPONSE=$(curl -sS -H "Authorization: token $TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/traffic/views" || echo '{}')
+            VIEWS=$(echo "$RESPONSE" | jq -r '.count // 0')
+          else
+            VIEWS=0
+          fi
+          # Fallback to counter.json if Traffic API returns 0
+          if [ "$VIEWS" = "0" ] && [ -f counter.json ]; then
+            VIEWS=$(jq -r '.count // 0' counter.json)
+          fi
+          echo "views=$VIEWS" >> $GITHUB_OUTPUT
+
+      - name: Generate counter from beaver theme
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends imagemagick
+          n=${{ steps.count.outputs.views }}
+          digits=$(printf "%07d" $n)
+          files=$(echo $digits | sed 's/\(.\)/theme\/\1.png /g')
+          convert $files -resize 80x80 +append counter.png
+
+      - name: Commit and Push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add counter.png
+          git diff --staged --quiet || git commit -m "Update visitor count: ${{ steps.count.outputs.views }}"
+          git push
