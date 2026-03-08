@@ -6,6 +6,7 @@ on:
     paths-ignore:
       - counter.png
       - theme/
+      - README.md
   schedule:
     - cron: '0 * * * *'  # Запуск каждый час
   workflow_dispatch:  # Позволяет запустить вручную
@@ -46,10 +47,14 @@ jobs:
           files=$(echo $digits | sed 's/\(.\)/theme\/\1.png /g')
           convert $files -resize 80x80 +append counter.png
 
+      - name: Update README cache-bust
+        run: |
+          sed -i "s/counter.png?v=[0-9]*/counter.png?v=${{ steps.count.outputs.views }}/" README.md
+
       - name: Commit and Push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add counter.png
+          git add counter.png README.md
           git diff --staged --quiet || git commit -m "Update visitor count: ${{ steps.count.outputs.views }}"
           git push
