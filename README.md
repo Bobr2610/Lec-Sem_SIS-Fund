@@ -17,6 +17,6 @@
 
 ### посещений
 
-[![Views](https://github.com/Bobr2610/Lec-Sem_SIS-Fund/raw/main/counter.png?v=130)](https://github.com/Bobr2610/Lec-Sem_SIS-Fund/blob/main/counter.png)
+[![Views](https://github.com/Bobr2610/Lec-Sem_SIS-Fund/raw/main/counter.png?v=84)](https://github.com/Bobr2610/Lec-Sem_SIS-Fund/blob/main/counter.png)
 
 </div>
