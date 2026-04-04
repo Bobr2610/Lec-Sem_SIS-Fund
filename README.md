@@ -11,12 +11,4 @@
 
 1. Откройте соответствующий файл лекции или семинара для просмотра материалов.
 2. Для генерации PDF файлов используйте скрипт `build-pdf.ps1`.
-
-
-<div align="center">
-
-### посещений
-
-[![Views](https://github.com/Bobr2610/Lec-Sem_SIS-Fund/raw/main/counter.png?v=1)](https://github.com/Bobr2610/Lec-Sem_SIS-Fund/blob/main/counter.png)
-
-</div>
+  
