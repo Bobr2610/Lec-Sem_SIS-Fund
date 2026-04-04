@@ -2,16 +2,16 @@ Write-Host "Building PDFs for all categories..." -ForegroundColor Cyan
 
 # Define categories and filters
 $categories = @(
-    @{ Name = "SIS_Lectures"; Filter = "Lectures/SIS*.md"; Output = "SIS_Lectures.pdf" },
-    @{ Name = "FUN_Lectures"; Filter = "Lectures/Fun*.md"; Output = "FUN_Lectures.pdf" },
-    @{ Name = "SIS_Seminars"; Filter = "Seminars/SIS*.md"; Output = "SIS_Seminars.pdf" },
-    @{ Name = "FUN_Seminars"; Filter = "Seminars/Fun*.md"; Output = "FUN_Seminars.pdf" }
+    @{ Name = "SIS_Lectures"; Path = "Lectures"; Filter = "SIS*.md"; Output = "SIS_Lectures.pdf" },
+    @{ Name = "FUN_Lectures"; Path = "Lectures"; Filter = "Fun*.md"; Output = "FUN_Lectures.pdf" },
+    @{ Name = "SIS_Seminars"; Path = "Seminars"; Filter = "SIS*.md"; Output = "SIS_Seminars.pdf" },
+    @{ Name = "FUN_Seminars"; Path = "Seminars"; Filter = "Fun*.md"; Output = "FUN_Seminars.pdf" }
 )
 
 foreach ($category in $categories) {
     Write-Host "Processing category: $($category.Name)" -ForegroundColor Cyan
 
-    $files = Get-ChildItem -Recurse -Filter $category.Filter | Sort-Object { [int]($_.BaseName -replace '\D+', '') } | ForEach-Object { $_.FullName }
+    $files = Get-ChildItem -Path $category.Path -Filter $category.Filter | Sort-Object { [int]($_.BaseName -replace '\D+', '') } | ForEach-Object { $_.FullName }
 
     if ($files.Count -eq 0) {
         Write-Host "No markdown files found for $($category.Name)" -ForegroundColor Red
@@ -23,8 +23,9 @@ foreach ($category in $categories) {
     Write-Host "Creating $($category.Output)..." -ForegroundColor Cyan
     pandoc $files `
         -o $category.Output `
+        --resource-path=".;.\Lectures;.\Seminars" `
         --pdf-engine=xelatex `
-        -V geometry:margin=0.5cm `
+        -V geometry:a4paper,margin=1cm `
         -V mainfont="Cambria" `
         -V mathfont="Cambria Math" `
         -V monofont="Consolas" `
