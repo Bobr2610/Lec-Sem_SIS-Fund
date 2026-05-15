@@ -747,52 +747,6 @@ void insertNonFull(BNode<K>* n, K k, int T){
 }
 ```
 
-**Поиск:**
-```cpp
-BNode<K>* search(BNode<K>* n, K k){
-    int i=0;
-    while(i<n->keys.size() && k>n->keys[i]) ++i;
-    if(i<n->keys.size() && n->keys[i]==k) return n;
-    if(n->leaf) return nullptr;
-    return search(n->ch[i], k);
-}
-```
-
-**Сплит 1→2** — переполненный ребенок `p->ch[i]` делится, медиана поднимается в `p`:
-```cpp
-void split(BNode<K>* p, int i){
-    BNode<K>* old = p->ch[i];
-    BNode<K>* neo = new BNode<K>(old->leaf);
-    int mid = old->keys.size()/2;
-    int up  = old->keys[mid];
-
-    neo->keys.assign(old->keys.begin()+mid+1, old->keys.end());
-    old->keys.resize(mid);
-    if(!old->leaf){
-        neo->ch.assign(old->ch.begin()+mid+1, old->ch.end());
-        old->ch.resize(mid+1);
-    }
-    p->keys.insert(p->keys.begin()+i, up);
-    p->ch.insert(p->ch.begin()+i+1, neo);
-}
-```
-
-**Вставка** (спуск к листу, сплит переполненных на пути):
-```cpp
-void insertNonFull(BNode<K>* n, K k, int T){
-    if(n->leaf){
-        auto it = lower_bound(n->keys.begin(), n->keys.end(), k);
-        n->keys.insert(it, k); return;
-    }
-    int i = upper_bound(n->keys.begin(), n->keys.end(), k) - n->keys.begin();
-    if(n->ch[i]->keys.size() == 2*T-1){
-        split(n, i);
-        if(k > n->keys[i]) ++i;
-    }
-    insertNonFull(n->ch[i], k, T);
-}
-```
-
 ---
 
 ### 12.3 B+ дерево
