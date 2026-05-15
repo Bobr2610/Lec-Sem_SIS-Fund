@@ -522,7 +522,7 @@ int munmap(void *addr, size_t length);
 ## 11. Алгоритмы управления динамической памятью
 
 ### First fit
-Первый свободный блок размером ≥ запроса. Просмотр списка с начала, при первом подходящем — занимаем (с разбиением, если блок сильно больше).
+Первый свободный блок размером ≥ запроса — просматриваем список с начала и занимаем при первом совпадении.
 
 ```cpp
 struct B { size_t sz; bool fr; B* n; };
@@ -536,7 +536,7 @@ B* first_fit(size_t n) {
 ```
 
 ### Best fit
-Свободный блок с минимальным `sz ≥ n`. Требует полного просмотра списка, оставляет мелкие остатки.
+Блок с минимальным `sz ≥ n` — полный просмотр списка, оставляет мелкие остатки.
 
 ```cpp
 B* best_fit(size_t n) {
@@ -549,7 +549,7 @@ B* best_fit(size_t n) {
 ```
 
 ### Worst fit
-Свободный блок с максимальным `sz`. Остаток после разбиения, вероятно, тоже пригоден.
+Блок с максимальным `sz ≥ n` — остаток после разбиения, вероятно, тоже пригоден.
 
 ```cpp
 B* worst_fit(size_t n) {
@@ -562,29 +562,29 @@ B* worst_fit(size_t n) {
 ```
 
 ### Освобождение в рассортированном списке
-Свободные блоки хранятся по возрастанию адреса. При освобождении вставляем на место и сливаем с физическими соседями слева/справа.
+Свободные блоки хранятся по возрастанию адреса — вставляем на место и сливаем с физическими соседями слева/справа.
 
 ```cpp
-struct N { size_t sz; N *p, *n; char* a; };
+struct N { size_t sz; N *pr, *nx; char* a; };
 N* h = nullptr;
 
 void free_sorted(N* b) {
-    N* prev = nullptr, *cur = h;
-    while (cur && cur->a < b->a) { prev = cur; cur = cur->n; }
-    b->n = cur; b->p = prev;
-    if (prev) prev->n = b; else h = b;
-    if (cur) cur->p = b;
-    if (prev && prev->a + prev->sz == b->a) {
-        prev->sz += b->sz; prev->n = b->n; if (b->n) b->n->p = prev; b = prev;
+    N *p = nullptr, *c = h;
+    while (c && c->a < b->a) { p = c; c = c->nx; }
+    b->nx = c; b->pr = p;
+    if (p) p->nx = b; else h = b;
+    if (c) c->pr = b;
+    if (p && p->a + p->sz == b->a) {
+        p->sz += b->sz; p->nx = b->nx; if (b->nx) b->nx->pr = p; b = p;
     }
-    if (b->n && b->a + b->sz == b->n->a) {
-        b->sz += b->n->sz; b->n = b->n->n; if (b->n) b->n->p = b;
+    if (b->nx && b->a + b->sz == b->nx->a) {
+        b->sz += b->nx->sz; b->nx = b->nx->nx; if (b->nx) b->nx->pr = b;
     }
 }
 ```
 
 ### Boundary tags
-В начале и конце блока хранят `size` и `free`. По «подвалу» слева за O(1) находим начало предыдущего блока и сливаемся с соседями.
+В начале и конце блока хранят `size` и `free` — по «подвалу» слева за O(1) находим начало предыдущего блока и сливаемся с соседями.
 
 ```cpp
 struct T { size_t sz; bool fr;
@@ -601,36 +601,27 @@ void free_bt(T* b) {
 ```
 
 ### Buddy system
-Память — блоки размером `2^k`. Нехватка блока порождает деление большего пополам. При освобождении двойник находится XOR'ом адреса с размером; если свободен — сливаем.
+Память — блоки размером `2^k`; при освобождении двойник находится XOR'ом адреса с размером, если свободен — сливаем.
 
 ```cpp
-struct Buddy {
-    struct B { size_t sz; B* n; };
-    std::vector<B*> f; // f[k] — блоки размера 2^k
-
-    void* alloc(size_t r) {
-        int k = 0; while ((1u << k) < r) ++k;
-        int j = k; while (j < (int)f.size() && !f[j]) ++j;
-        if (j == (int)f.size()) return nullptr;
-        B* b = f[j]; f[j] = b->n;
-        while (j > k) { --j; B* d = (B*)((char*)b + (1u << j)); d->sz = 1u << j; d->n = f[j]; f[j] = d; }
-        return b;
-    }
-    void free(void* p, size_t r) {
-        int k = 0; while ((1u << k) < r) ++k;
-        B* b = (B*)p; b->sz = 1u << k;
-        while (k < (int)f.size()) {
-            B* d = (B*)((size_t)b ^ (1u << k));
-            B** q = &f[k]; while (*q && *q != d) q = &(*q)->n;
-            if (!*q) { b->n = f[k]; f[k] = b; return; }
-            *q = (*q)->n; if (d < b) b = d; ++k;
-        }
-    }
-};
+void* f[32];
+void* alloc(size_t r) {
+    int k = 0, j; while ((1u << k) < r) ++k;
+    for (j = k; j < 32 && !f[j]; ++j); if (j == 32) return 0;
+    void* b = f[j]; f[j] = *(void**)b;
+    while (--j >= k) { void* d = (char*)b + (1u << j); *(void**)d = f[j]; f[j] = d; }
+    return b; }
+void free_buddy(void* p, size_t r) {
+    int k = 0; while ((1u << k) < r) ++k; void* b = p;
+    for (; k < 32; ++k) { void* d = (void*)((size_t)b ^ (1u << k)); void** q = &f[k];
+        while (*q && *q != d) q = (void**)*q;
+        if (!*q) { *(void**)b = f[k]; f[k] = b; return; }
+        *q = *(void**)*q; if (d < b) b = d; }
+}
 ```
 
 ### Двусвязный список + RB-дерево
-Все блоки связаны в двусвязный список по адресу (для слияния соседей). Свободные блоки индексируются красно-чёрным деревом по размеру — поиск best fit за `O(log m)`. `std::multimap` в C++ реализован на RB-дереве.
+Все блоки связаны по адресу для слияния соседей; свободные индексируются `std::multimap` (RB-дерево) по размеру — поиск best fit за `O(log m)`.
 
 ```cpp
 struct Block { size_t sz; bool fr; Block *pr, *nx; std::multimap<size_t, Block*>::iterator it; };
@@ -638,346 +629,461 @@ std::multimap<size_t, Block*> t;
 
 Block* alloc(size_t n) {
     auto it = t.lower_bound(n);
-    if (it == t.end()) return nullptr;
+    if (it == t.end()) return 0;
     Block* b = it->second; t.erase(it); b->fr = 0;
-    if (b->sz > n + sizeof(Block)) {
-        Block* r = (Block*)((char*)b + n);
+    if (b->sz > n) { Block* r = (Block*)((char*)b + n);
         r->sz = b->sz - n; r->fr = 1; r->pr = b; r->nx = b->nx;
-        if (b->nx) b->nx->pr = r; b->nx = r; b->sz = n;
-        r->it = t.insert({r->sz, r});
-    }
-    return b;
-}
-
+        if (b->nx) b->nx->pr = r; b->nx = r; b->sz = n; r->it = t.insert({r->sz, r}); }
+    return b; }
 void free_rb(Block* b) {
     b->fr = 1;
-    if (b->pr && b->pr->fr) {
-        t.erase(b->pr->it); b->pr->sz += b->sz;
-        b->pr->nx = b->nx; if (b->nx) b->nx->pr = b->pr; b = b->pr;
-    }
-    if (b->nx && b->nx->fr) {
-        t.erase(b->nx->it); b->sz += b->nx->sz;
-        b->nx = b->nx->nx; if (b->nx) b->nx->pr = b;
-    }
-    b->it = t.insert({b->sz, b});
-}
+    if (b->pr && b->pr->fr) { t.erase(b->pr->it); b->pr->sz += b->sz; b->pr->nx = b->nx; if (b->nx) b->nx->pr = b->pr; b = b->pr; }
+    if (b->nx && b->nx->fr) { t.erase(b->nx->it); b->sz += b->nx->sz; b->nx = b->nx->nx; if (b->nx) b->nx->pr = b; }
+    b->it = t.insert({b->sz, b}); }
 ```
 
 ## 12. Сбалансированные по высоте деревья поиска. Повороты. B-дерево, B+-дерево, B*-дерево, B*+-дерево
 
-**АВЛ-дерево** — ДБП, у которого для любой вершины |h(left) − h(right)| ≤ 1. Баланс-фактор = h(left) − h(right) ∈ {−1, 0, 1}. Балансировка — 4 поворота.
+---
+
+### 12.1 АВЛ-повороты
+
+**Баланс-фактор:** `bf(v) = h(left) − h(right)`. Допустимы `−1, 0, 1`. Если `|bf| > 1` — делаем поворот.
 
 ```cpp
-template <typename Key>
-struct AVLNode {
-    Key key;
-    int height;
-    AVLNode *left, *right;
+struct AVLNode { int key, h=1; AVLNode *l=nullptr, *r=nullptr; };
+int H(AVLNode* v){ return v ? v->h : 0; }
+void U(AVLNode* v){ v->h = 1+max(H(v->l), H(v->r)); }
+
+// LL — малый правый поворот
+AVLNode* SR(AVLNode* v){
+    AVLNode* b=v->l; v->l=b->r; b->r=v; U(v); U(b); return b;
+}
+// RR — малый левый поворот
+AVLNode* SL(AVLNode* v){
+    AVLNode* b=v->r; v->r=b->l; b->l=v; U(v); U(b); return b;
+}
+// LR — большой правый (левый→правый)
+AVLNode* BR(AVLNode* v){ v->l=SL(v->l); return SR(v); }
+// RL — большой левый (правый→левый)
+AVLNode* BL(AVLNode* v){ v->r=SR(v->r); return SL(v); }
+```
+
+| bf(v) | Куда вставка | Поворот |
+|--------|-------------|---------|
+| `+2` | левее `v->l` | **SR** (LL) |
+| `+2` | правее `v->l` | **BR** (LR) |
+| `−2` | правее `v->r` | **SL** (RR) |
+| `−2` | левее `v->r` | **BL** (RL) |
+
+---
+
+### 12.2 B-дерево — базовый код
+
+`t` — мин. степень. `max_keys = 2t−1`, `min_keys = t−1`. Внутренний узел с `k` ключами имеет `k+1` ребенка. Все листья на одной глубине.
+
+```cpp
+template<typename K>
+struct BNode{
+    bool leaf;
+    vector<K> keys;
+    vector<BNode*> ch;
+    BNode(bool l):leaf(l){}
 };
+```
 
-int h(AVLNode* n) { return n ? n->height : 0; }
-void upd(AVLNode* n) { if (n) n->height = 1 + std::max(h(n->left), h(n->right)); }
+**Поиск:**
 
-AVLNode* smallRight(AVLNode* y) {   // LL
-    AVLNode* x = y->left;
-    y->left = x->right;
-    x->right = y;
-    upd(y); upd(x);
-    return x;
-}
-AVLNode* smallLeft(AVLNode* x) {    // RR
-    AVLNode* y = x->right;
-    x->right = y->left;
-    y->left = x;
-    upd(x); upd(y);
-    return y;
-}
-AVLNode* bigRight(AVLNode* n) {     // LR
-    n->left = smallLeft(n->left);
-    return smallRight(n);
-}
-AVLNode* bigLeft(AVLNode* n) {      // RL
-    n->right = smallRight(n->right);
-    return smallLeft(n);
+Идём сверху вниз. В текущем узле ищем позицию `i`: пока `k > keys[i]` — двигаемся вправо. Если `keys[i] == k` — нашли. Если дошли до листа и не нашли — элемента нет. Иначе спускаемся в ребенка `ch[i]`.
+
+```cpp
+BNode<K>* search(BNode<K>* n, K k){
+    int i=0;
+    while(i<n->keys.size() && k>n->keys[i]) ++i;
+    if(i<n->keys.size() && n->keys[i]==k) return n;
+    if(n->leaf) return nullptr;
+    return search(n->ch[i], k);
 }
 ```
 
-**B-дерево** — сильно ветвящееся дерево, все листья на одной глубине. Узел (кроме корня) содержит от t−1 до 2t−1 ключей, у внутреннего узла k ключей — k+1 детей.  
-**B+** — данные только в листьях, листья связаны в список.  
-**B\*** — минимальное заполнение 2/3, при переполнении сначала redistribute с соседом, иначе split 2→3.  
-**B\*+** — объединяет B+ и B\*.
+**Сплит 1→2:**
 
-### Узел и поиск (общий для всех)
+Переполненный ребенок `p->ch[i]` (у него `2t−1` ключей) делится на два узла. Средний ключ `up = keys[mid]` поднимается в родителя `p` как разделитель. Левая половина остаётся в `old`, правая — уходит в новый узел `neo`. Если `old` внутренний — дети тоже делятся пополам.
 
 ```cpp
-template <typename Key>
-struct BNode {
-    bool is_leaf;
-    std::vector<Key> keys;
-    std::vector<BNode*> children;
-    BNode* next_leaf;   // B+, B*+
-};
+void split(BNode<K>* p, int i){
+    BNode<K>* old = p->ch[i];
+    BNode<K>* neo = new BNode<K>(old->leaf);
+    int mid = old->keys.size()/2;
+    int up  = old->keys[mid];
 
-BNode<Key>* search(BNode<Key>* n, Key k) {
-    if (!n) return nullptr;
-    int i = 0;
-    while (i < n->keys.size() && k > n->keys[i]) ++i;
-    if (i < n->keys.size() && n->keys[i] == k) return n;
-    if (n->is_leaf) return nullptr;
-    return search(n->children[i], k);
+    neo->keys.assign(old->keys.begin()+mid+1, old->keys.end());
+    old->keys.resize(mid);
+    if(!old->leaf){
+        neo->ch.assign(old->ch.begin()+mid+1, old->ch.end());
+        old->ch.resize(mid+1);
+    }
+    p->keys.insert(p->keys.begin()+i, up);
+    p->ch.insert(p->ch.begin()+i+1, neo);
 }
 ```
 
-### Вставка: сплит, redistribute, split2to3
+**Вставка:**
+
+Спускаемся от корня к листу. Перед спуском в ребенка проверяем: если ребенок полон (`2t−1` ключей), делаем `split`. После сплита решаем, в какую из двух половин идти (`if (k > keys[i]) ++i`). В лист вставляем ключ в отсортированный вектор.
 
 ```cpp
-// Обычный сплит 1->2 (для B, B+, B*+ при росте корня)
-void splitChild(BNode<Key>* p, int i) {
-    BNode<Key>* old = p->children[i];
-    BNode<Key>* neo = new BNode<Key>{old->is_leaf};
-    int mid = old->keys.size() / 2;
-    int up = old->keys[mid];
-
-    if (old->is_leaf) {
-        neo->keys.assign(old->keys.begin() + mid, old->keys.end());
-        old->keys.erase(old->keys.begin() + mid, old->keys.end());
-        neo->next_leaf = old->next_leaf;
-        old->next_leaf = neo;
-    } else {
-        neo->keys.assign(old->keys.begin() + mid + 1, old->keys.end());
-        old->keys.erase(old->keys.begin() + mid, old->keys.end());
-        neo->children.assign(old->children.begin() + mid + 1, old->children.end());
-        old->children.erase(old->children.begin() + mid + 1, old->children.end());
+void insertNonFull(BNode<K>* n, K k, int T){
+    if(n->leaf){
+        auto it = lower_bound(n->keys.begin(), n->keys.end(), k);
+        n->keys.insert(it, k); return;
     }
-    p->keys.insert(p->keys.begin() + i, up);
-    p->children.insert(p->children.begin() + i + 1, neo);
+    int i = upper_bound(n->keys.begin(), n->keys.end(), k) - n->keys.begin();
+    if(n->ch[i]->keys.size() == 2*T-1){
+        split(n, i);
+        if(k > n->keys[i]) ++i;
+    }
+    insertNonFull(n->ch[i], k, T);
 }
+```
 
-// Перераспределение через родителя (B*, B*+)
-bool redistribute(BNode<Key>* p, int i, int max_keys) {
-    BNode<Key>* node = p->children[i];
-    if (i + 1 < p->children.size()) {
-        BNode<Key>* r = p->children[i + 1];
-        if (r->keys.size() < max_keys) {
-            r->keys.insert(r->keys.begin(), p->keys[i]);
-            p->keys[i] = node->keys.back();
-            node->keys.pop_back();
-            if (!node->is_leaf) {
-                r->children.insert(r->children.begin(), node->children.back());
-                node->children.pop_back();
-            }
-            return true;
-        }
+**Поиск:**
+```cpp
+BNode<K>* search(BNode<K>* n, K k){
+    int i=0;
+    while(i<n->keys.size() && k>n->keys[i]) ++i;
+    if(i<n->keys.size() && n->keys[i]==k) return n;
+    if(n->leaf) return nullptr;
+    return search(n->ch[i], k);
+}
+```
+
+**Сплит 1→2** — переполненный ребенок `p->ch[i]` делится, медиана поднимается в `p`:
+```cpp
+void split(BNode<K>* p, int i){
+    BNode<K>* old = p->ch[i];
+    BNode<K>* neo = new BNode<K>(old->leaf);
+    int mid = old->keys.size()/2;
+    int up  = old->keys[mid];
+
+    neo->keys.assign(old->keys.begin()+mid+1, old->keys.end());
+    old->keys.resize(mid);
+    if(!old->leaf){
+        neo->ch.assign(old->ch.begin()+mid+1, old->ch.end());
+        old->ch.resize(mid+1);
     }
-    if (i > 0) {
-        BNode<Key>* l = p->children[i - 1];
-        if (l->keys.size() < max_keys) {
-            l->keys.push_back(p->keys[i - 1]);
-            p->keys[i - 1] = node->keys[0];
-            node->keys.erase(node->keys.begin());
-            if (!node->is_leaf) {
-                l->children.push_back(node->children[0]);
-                node->children.erase(node->children.begin());
-            }
-            return true;
-        }
+    p->keys.insert(p->keys.begin()+i, up);
+    p->ch.insert(p->ch.begin()+i+1, neo);
+}
+```
+
+**Вставка** (спуск к листу, сплит переполненных на пути):
+```cpp
+void insertNonFull(BNode<K>* n, K k, int T){
+    if(n->leaf){
+        auto it = lower_bound(n->keys.begin(), n->keys.end(), k);
+        n->keys.insert(it, k); return;
+    }
+    int i = upper_bound(n->keys.begin(), n->keys.end(), k) - n->keys.begin();
+    if(n->ch[i]->keys.size() == 2*T-1){
+        split(n, i);
+        if(k > n->keys[i]) ++i;
+    }
+    insertNonFull(n->ch[i], k, T);
+}
+```
+
+---
+
+### 12.3 B+ дерево
+
+Отличие от B: **данные только в листьях**. Внутренние узлы — копии-разделители. Листья связаны в список `next`.
+
+**Структура:** добавить `BNode* next` к узлу выше (инициализировать `nullptr`).
+
+**Сплит листа B+:**
+
+Лист делится пополам: правая половина уходит в новый узел `neo`, левая остаётся. Листья связываются через `next`. В родителе поднимается **копия** первого ключа `neo` как разделитель. Это отличие от B-дерева, где поднимается сам ключ — здесь ключ остаётся и в листе, и копия идёт вверх.
+
+```cpp
+void splitLeaf(BNode<int>* p, int i){
+    BNode<int>* old = p->ch[i];
+    BNode<int>* neo = new BNode<int>(true);
+    int mid = old->keys.size()/2;
+    neo->keys.assign(old->keys.begin()+mid, old->keys.end());
+    old->keys.erase(old->keys.begin()+mid, old->keys.end());
+    neo->next = old->next; old->next = neo;
+    p->keys.insert(p->keys.begin()+i, neo->keys[0]);   // КОПИЯ
+    p->ch.insert(p->ch.begin()+i+1, neo);
+}
+```
+
+**Поиск в диапазоне:**
+
+Сначала спускаемся по внутренним узлам к листу, где может начинаться диапазон (`upper_bound` по `a`). Затем идём по связному списку листьев через `next` и собираем ключи, пока не вышли за `b`. Это `O(log n + k)`, где `k` — число найденных элементов.
+
+```cpp
+void rangeSearch(BNode<int>* root, int a, int b, vector<int>& out){
+    BNode<int>* cur = root;
+    while(!cur->leaf){
+        int i = upper_bound(cur->keys.begin(), cur->keys.end(), a) - cur->keys.begin();
+        cur = cur->ch[i];
+    }
+    while(cur){
+        for(int k: cur->keys)
+            if(k>=a && k<=b) out.push_back(k);
+            else if(k>b) return;
+        cur = cur->next;
+    }
+}
+```
+
+---
+
+### 12.4 B* дерево — перераспределение и сплит 2→3
+
+Мин. заполнение **2/3**. При переполнении сначала **redistribute** — передать 1 ключ соседу через родителя. Если оба соседа полны — **split 2→3**.
+
+**Перераспределение (redistribute):**
+
+Узел `p->ch[i]` переполнен. Проверяем правого соседа (`i+1`): если у него есть место (`< maxK`), берем разделитель `p->keys[i]` и самый правый ключ `node` — передаём в соседа. Разделитель в родителе заменяется на новый крайний ключ `node`. Если правый сосед полон — проверяем левого (`i-1`). Для внутренних узлов вместе с ключом передаётся и соответствующий ребенок.
+
+```cpp
+bool redistribute(BNode<int>* p, int i, int maxK){
+    BNode<int>* node = p->ch[i];
+    if(i+1 < p->ch.size() && p->ch[i+1]->keys.size() < maxK){
+        BNode<int>* r = p->ch[i+1];
+        r->keys.insert(r->keys.begin(), p->keys[i]);
+        p->keys[i] = node->keys.back(); node->keys.pop_back();
+        if(!node->leaf){ r->ch.insert(r->ch.begin(), node->ch.back()); node->ch.pop_back(); }
+        return true;
+    }
+    if(i>0 && p->ch[i-1]->keys.size() < maxK){
+        BNode<int>* l = p->ch[i-1];
+        l->keys.push_back(p->keys[i-1]);
+        p->keys[i-1] = node->keys[0]; node->keys.erase(node->keys.begin());
+        if(!node->leaf){ l->ch.push_back(node->ch[0]); node->ch.erase(node->ch.begin()); }
+        return true;
     }
     return false;
 }
+```
 
-// B* сплит 2->3: два полных узла + разделитель -> три узла
-void split2to3(BNode<Key>* p, int i) {
-    BNode<Key>* L = p->children[i];
-    BNode<Key>* R = p->children[i + 1];
-    BNode<Key>* M = new BNode<Key>{L->is_leaf};
+**Сплит 2→3:**
 
-    std::vector<Key> all;
-    all.insert(all.end(), L->keys.begin(), L->keys.end());
-    all.push_back(p->keys[i]);
+Два полных узла `L` и `R` (по `2t−1` ключей) + разделитель из родителя (`p->keys[idx]`) объединяются в один массив (`4t−1` ключей). Делим на **3 примерно равные части** (~2/3 заполнения). Средний узел `M` создаётся новым. В родителе один разделитель заменяется на два новых.
+
+```cpp
+// Два полных узла idx и idx+1 + разделитель -> три узла
+void split2to3(BNode<int>* p, int idx){
+    BNode<int>* L = p->ch[idx];
+    BNode<int>* R = p->ch[idx+1];
+    BNode<int>* M = new BNode<int>(L->leaf);
+
+    vector<int> all = L->keys;
+    all.push_back(p->keys[idx]);
     all.insert(all.end(), R->keys.begin(), R->keys.end());
 
-    int n = all.size(), s1 = n / 3, s2 = 2 * n / 3;
-    L->keys.assign(all.begin(), all.begin() + s1);
-    M->keys.assign(all.begin() + s1 + 1, all.begin() + s2);
-    R->keys.assign(all.begin() + s2 + 1, all.end());
-    p->keys[i] = all[s1];
+    int n = all.size(), s1 = n/3, s2 = 2*n/3;
+    L->keys.assign(all.begin(), all.begin()+s1);
+    M->keys.assign(all.begin()+s1+1, all.begin()+s2);
+    R->keys.assign(all.begin()+s2+1, all.end());
+    p->keys[idx] = all[s1];
+    p->keys.insert(p->keys.begin()+idx+1, all[s2]);
+    p->ch.insert(p->ch.begin()+idx+1, M);
 
-    if (!L->is_leaf) {
-        std::vector<BNode<Key>*> allc;
-        allc.insert(allc.end(), L->children.begin(), L->children.end());
-        allc.insert(allc.end(), R->children.begin(), R->children.end());
-        int c1 = s1 + 1, c2 = s2 + 1;
-        L->children.assign(allc.begin(), allc.begin() + c1);
-        M->children.assign(allc.begin() + c1, allc.begin() + c2);
-        R->children.assign(allc.begin() + c2, allc.end());
-    } else {
-        M->next_leaf = R->next_leaf;
-        L->next_leaf = M;
+    if(!L->leaf){
+        vector<BNode<int>*> allc;
+        allc.insert(allc.end(), L->ch.begin(), L->ch.end());
+        allc.insert(allc.end(), R->ch.begin(), R->ch.end());
+        int c1 = s1+1, c2 = s2+1;
+        L->ch.assign(allc.begin(), allc.begin()+c1);
+        M->ch.assign(allc.begin()+c1, allc.begin()+c2);
+        R->ch.assign(allc.begin()+c2, allc.end());
     }
-    p->keys.insert(p->keys.begin() + i + 1, all[s2]);
-    p->children.insert(p->children.begin() + i + 1, M);
 }
 ```
 
-### Удаление: borrow + merge
+---
+
+### 12.5 B*+ дерево — полная вставка
+
+Комбинирует B+ (данные в листьях, `next`) и B* (`redistribute` + `split2to3`).
+
+**Архитектура класса:**
+
+- `Node` — структура узла: `leaf`, `keys`, `ch`, `next`.
+- `splitChild` — обычный B+-сплит 1→2. Для листьев разделитель = **копия** первого ключа правого листа.
+- `tryRedistribute` — проверяет левого и правого брата: если кто-то не полон, сдвигаем 1 ключ через родителя (`shiftLeft` / `shiftRight`).
+- `split2to3` — B*-сплит для листьев: берём два соседних листа, объединяем ключи, делим на 3 части.
+- `insertNonFull` — спуск к листу. После возврата из рекурсии вызываем `fix` для ребенка, чтобы обработать переполнение.
+- `fix` — логика B*: сначала `tryRedistribute`, потом если не получилось — `split2to3` (для листьев) или `splitChild` (для внутренних).
 
 ```cpp
-void borrowFromPrev(BNode<Key>* p, int i) {
-    BNode<Key>* node = p->children[i];
-    BNode<Key>* left = p->children[i - 1];
-    node->keys.insert(node->keys.begin(), p->keys[i - 1]);
-    p->keys[i - 1] = left->keys.back();
+class BStarPlusTree{
+    struct Node{ bool leaf; vector<int> keys; vector<Node*> ch; Node* next;
+        Node(bool l):leaf(l),next(nullptr){} };
+    static const int T = 2;          // max_keys = 2*T = 3
+    static const int MAX_KEYS = 3;
+    Node* root;
+    bool full(Node* n){ return (int)n->keys.size() >= MAX_KEYS; }
+
+    // Обычный сплит 1->2 (для внутренних узлов и роста корня)
+    void splitChild(Node* p, int i){
+        Node* old = p->ch[i];
+        Node* neo = new Node(old->leaf);
+        int mid = old->keys.size()/2;
+        int up  = old->keys[mid];
+        if(old->leaf){
+            neo->keys.assign(old->keys.begin()+mid, old->keys.end());
+            old->keys.erase(old->keys.begin()+mid, old->keys.end());
+            neo->next = old->next; old->next = neo;
+            up = neo->keys[0];               // B+: копия разделителя
+        }else{
+            neo->keys.assign(old->keys.begin()+mid+1, old->keys.end());
+            old->keys.resize(mid);
+            neo->ch.assign(old->ch.begin()+mid+1, old->ch.end());
+            old->ch.resize(mid+1);
+        }
+        p->keys.insert(p->keys.begin()+i, up);
+        p->ch.insert(p->ch.begin()+i+1, neo);
+    }
+
+    bool tryRedistribute(Node* node, Node* parent, int idx){
+        if(!parent) return false;
+        if(idx>0 && !full(parent->ch[idx-1])){
+            shiftLeft(node, parent->ch[idx-1], parent, idx-1); return true;
+        }
+        if(idx+1<(int)parent->ch.size() && !full(parent->ch[idx+1])){
+            shiftRight(node, parent->ch[idx+1], parent, idx); return true;
+        }
+        return false;
+    }
+
+    void shiftLeft(Node* node, Node* left, Node* parent, int pIdx){
+        if(node->leaf){
+            left->keys.push_back(node->keys[0]);
+            node->keys.erase(node->keys.begin());
+            parent->keys[pIdx] = node->keys[0];
+        }else{
+            left->keys.push_back(parent->keys[pIdx]);
+            left->ch.push_back(node->ch[0]);
+            parent->keys[pIdx] = node->keys[0];
+            node->keys.erase(node->keys.begin());
+            node->ch.erase(node->ch.begin());
+        }
+    }
+    void shiftRight(Node* node, Node* right, Node* parent, int pIdx){
+        if(node->leaf){
+            right->keys.insert(right->keys.begin(), node->keys.back());
+            node->keys.pop_back();
+            parent->keys[pIdx] = right->keys[0];
+        }else{
+            right->keys.insert(right->keys.begin(), parent->keys[pIdx]);
+            right->ch.insert(right->ch.begin(), node->ch.back());
+            parent->keys[pIdx] = node->keys.back();
+            node->keys.pop_back(); node->ch.pop_back();
+        }
+    }
+
+    void split2to3(Node* parent, int idx){
+        if(idx+1 >= (int)parent->ch.size()) idx = (int)parent->ch.size()-2;
+        Node* a = parent->ch[idx];
+        Node* b = parent->ch[idx+1];
+        vector<int> all = a->keys;
+        all.insert(all.end(), b->keys.begin(), b->keys.end());
+        int n = all.size(), n1 = n/3, n2 = (n-n1)/2, n3 = n-n1-n2;
+        a->keys.assign(all.begin(), all.begin()+n1);
+        Node* mid = new Node(true);
+        mid->keys.assign(all.begin()+n1, all.begin()+n1+n2);
+        b->keys.assign(all.begin()+n1+n2, all.end());
+        mid->next = b->next; a->next = mid;
+        parent->keys[idx] = mid->keys[0];
+        parent->keys.insert(parent->keys.begin()+idx+1, b->keys[0]);
+        parent->ch.insert(parent->ch.begin()+idx+1, mid);
+    }
+
+    void insertNonFull(Node* n, Node* parent, int idx, int key){
+        if(n->leaf){
+            auto it = lower_bound(n->keys.begin(), n->keys.end(), key);
+            n->keys.insert(it, key); return;
+        }
+        int i = upper_bound(n->keys.begin(), n->keys.end(), key) - n->keys.begin();
+        insertNonFull(n->ch[i], n, i, key);
+        fix(n->ch[i], n, i);
+    }
+
+    void fix(Node* child, Node* parent, int idx){
+        if(!child || (int)child->keys.size() <= MAX_KEYS) return;
+        if(tryRedistribute(child, parent, idx)) return;
+        if(child->leaf) split2to3(parent, idx);
+        else splitChild(parent, idx);
+    }
+
+public:
+    BStarPlusTree():root(new Node(true)){};
+
+    void insert(int key){
+        insertNonFull(root, nullptr, -1, key);
+        if((int)root->keys.size() > MAX_KEYS){
+            Node* neo = new Node(false);
+            neo->ch.push_back(root);
+            splitChild(neo, 0);
+            root = neo;
+        }
+    }
+};
+```
+
+---
+
+### 12.6 Удаление — borrow и merge
+
+Если после удаления в узле стало ключей `< min_keys`, нужно восстановить заполненность.
+
+**Borrow (заимствование):**
+
+У соседа слева (`p->ch[i-1]`) есть лишние ключи. Берём разделитель из родителя (`p->keys[i-1]`) и спускаем в недозаполненный узел. Самый правый ключ левого соседа поднимается в родителя на место разделителя.
+
+```cpp
+void borrowFromPrev(BNode<int>* p, int i){
+    BNode<int>* node = p->ch[i];
+    BNode<int>* left = p->ch[i-1];
+    node->keys.insert(node->keys.begin(), p->keys[i-1]);
+    p->keys[i-1] = left->keys.back();
     left->keys.pop_back();
 }
+```
 
-void mergeNodes(BNode<Key>* p, int i) {
-    BNode<Key>* L = p->children[i];
-    BNode<Key>* R = p->children[i + 1];
+**Merge (слияние):**
+
+Если у соседа нет лишних ключей — сливаем текущий узел с правым соседом. Разделитель из родителя спускается между ними. Все ключи `R` переносятся в `L`, `R` удаляется. Для B+ обновляем связной список листьев (`L->next = R->next`).
+
+```cpp
+void merge(BNode<int>* p, int i){
+    BNode<int>* L = p->ch[i];
+    BNode<int>* R = p->ch[i+1];
     L->keys.push_back(p->keys[i]);
-    for (auto k : R->keys) L->keys.push_back(k);
-    if (L->is_leaf) L->next_leaf = R->next_leaf;
-    p->keys.erase(p->keys.begin() + i);
-    p->children.erase(p->children.begin() + i + 1);
+    for(auto k: R->keys) L->keys.push_back(k);
+    if(L->leaf) L->next = R->next;
+    p->keys.erase(p->keys.begin()+i);
+    p->ch.erase(p->ch.begin()+i+1);
     delete R;
 }
 ```
 
-### B*+ дерево — полный класс с insert
+---
 
-```cpp
-class BStarPlusTree {
-    static const int T = 2;                 // max_keys = 2T
-    BNode<int>* root;
+### Что писать на экзамене
 
-    bool full(BNode<int>* n) { return n->keys.size() >= 2 * T; }
+| Что спросили | Набор кода |
+|-------------|-----------|
+| **B-дерево** | `Node` + `search` + `split` + `insertNonFull` (раздел 12.2) |
+| **B+ дерево** | Добавь `next` в `Node`, сплит листа с копией разделителя, `rangeSearch` (12.3) |
+| **B* дерево** | Добавь `redistribute` и `split2to3` к B (12.4) |
+| **B*+ дерево** | Комбинируй B+ (листья+next) и B* (redistribute+split2to3). Полный класс в 12.5 |
+| **АВЛ-повороты** | 4 функции: `SR`, `SL`, `BR`, `BL` + таблица выбора (12.1) |
 
-    void splitChild(BNode<int>* p, int i) {
-        BNode<int>* old = p->children[i];
-        BNode<int>* neo = new BNode<int>{old->is_leaf};
-        int mid = old->keys.size() / 2;
-        int up = old->keys[mid];
-
-        if (old->is_leaf) {
-            neo->keys.assign(old->keys.begin() + mid, old->keys.end());
-            old->keys.erase(old->keys.begin() + mid, old->keys.end());
-            neo->next_leaf = old->next_leaf;
-            old->next_leaf = neo;
-        } else {
-            neo->keys.assign(old->keys.begin() + mid + 1, old->keys.end());
-            old->keys.erase(old->keys.begin() + mid, old->keys.end());
-            neo->children.assign(old->children.begin() + mid + 1, old->children.end());
-            old->children.erase(old->children.begin() + mid + 1, old->children.end());
-        }
-        p->keys.insert(p->keys.begin() + i, up);
-        p->children.insert(p->children.begin() + i + 1, neo);
-    }
-
-    bool tryRedistribute(BNode<int>* p, int i) {
-        BNode<int>* node = p->children[i];
-        if (i + 1 < p->children.size()) {
-            BNode<int>* r = p->children[i + 1];
-            if (!full(r)) {
-                r->keys.insert(r->keys.begin(), p->keys[i]);
-                if (!node->is_leaf) {
-                    r->children.insert(r->children.begin(), node->children.back());
-                    node->children.pop_back();
-                }
-                p->keys[i] = node->keys.back();
-                node->keys.pop_back();
-                return true;
-            }
-        }
-        if (i > 0) {
-            BNode<int>* l = p->children[i - 1];
-            if (!full(l)) {
-                l->keys.push_back(p->keys[i - 1]);
-                if (!node->is_leaf) {
-                    l->children.push_back(node->children[0]);
-                    node->children.erase(node->children.begin());
-                }
-                p->keys[i - 1] = node->keys[0];
-                node->keys.erase(node->keys.begin());
-                return true;
-            }
-        }
-        return false;
-    }
-
-    void split2to3(BNode<int>* p, int i) {
-        BNode<int>* L = p->children[i];
-        BNode<int>* R = p->children[i + 1];
-        BNode<int>* M = new BNode<int>{L->is_leaf};
-
-        std::vector<int> all;
-        all.insert(all.end(), L->keys.begin(), L->keys.end());
-        all.push_back(p->keys[i]);
-        all.insert(all.end(), R->keys.begin(), R->keys.end());
-
-        int n = all.size(), s1 = n / 3, s2 = 2 * n / 3;
-        L->keys.assign(all.begin(), all.begin() + s1);
-        M->keys.assign(all.begin() + s1 + 1, all.begin() + s2);
-        R->keys.assign(all.begin() + s2 + 1, all.end());
-        p->keys[i] = all[s1];
-
-        if (!L->is_leaf) {
-            std::vector<BNode<int>*> allc;
-            allc.insert(allc.end(), L->children.begin(), L->children.end());
-            allc.insert(allc.end(), R->children.begin(), R->children.end());
-            int c1 = s1 + 1, c2 = s2 + 1;
-            L->children.assign(allc.begin(), allc.begin() + c1);
-            M->children.assign(allc.begin() + c1, allc.begin() + c2);
-            R->children.assign(allc.begin() + c2, allc.end());
-        } else {
-            M->next_leaf = R->next_leaf;
-            L->next_leaf = M;
-        }
-        p->keys.insert(p->keys.begin() + i + 1, all[s2]);
-        p->children.insert(p->children.begin() + i + 1, M);
-    }
-
-    void insertNonFull(BNode<int>* n, int key) {
-        if (n->is_leaf) {
-            int i = 0;
-            while (i < n->keys.size() && key > n->keys[i]) ++i;
-            n->keys.insert(n->keys.begin() + i, key);
-        } else {
-            int i = (int)n->keys.size() - 1;
-            while (i >= 0 && key < n->keys[i]) --i;
-            ++i;
-            if (full(n->children[i])) {
-                if (!tryRedistribute(n, i)) split2to3(n, i);
-                if (key > n->keys[i]) ++i;
-            }
-            insertNonFull(n->children[i], key);
-        }
-    }
-
-public:
-    BStarPlusTree() : root(new BNode<int>{true}) {}
-
-    void insert(int key) {
-        if (full(root)) {
-            BNode<int>* neo = new BNode<int>{false};
-            neo->children.push_back(root);
-            splitChild(neo, 0);
-            root = neo;
-        }
-        insertNonFull(root, key);
-    }
-
-    bool search(int key) {
-        BNode<int>* n = root;
-        while (n) {
-            int i = 0;
-            while (i < n->keys.size() && key > n->keys[i]) ++i;
-            if (i < n->keys.size() && n->keys[i] == key) return true;
-            if (n->is_leaf) return false;
-            n = n->children[i];
-        }
-        return false;
-    }
-};
-```
 
 ## Краткий список надежных источников
 
